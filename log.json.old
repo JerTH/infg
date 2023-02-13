@@ -1,0 +1,146 @@
+{
+  "id": {
+    "_unique": 87391629777493745086230449427079757824
+  },
+  "timestamp": "2023-01-21T17:47:49.576805477Z",
+  "messages": [
+    {
+      "index": 0,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 539933685
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "setting vulkan instance app name: Test App Name"
+      }
+    },
+    {
+      "index": 1,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 539945882
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "setting vulkan instance engine name: Test Engine Name"
+      }
+    },
+    {
+      "index": 2,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 539952672
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "enabling vulkan instance extensions: [ExtDebugUtils, KhrSurface, KhrWaylandSurface]"
+      }
+    },
+    {
+      "index": 3,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 539969133
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "enabling vulkan instance validation layers: [KhronosValidation]"
+      }
+    },
+    {
+      "index": 4,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 539983202
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "building vulkan instance"
+      }
+    },
+    {
+      "index": 5,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 540001615
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "enabled instance extensions: [0x55fbfe45dd39, 0x55fbfe45dd6c, 0x55fbfe45dd59]"
+      }
+    },
+    {
+      "index": 6,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 663034646
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "building vulkan logical device"
+      }
+    },
+    {
+      "index": 7,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 663431998
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "found 1 gtc surface support queues"
+      }
+    },
+    {
+      "index": 8,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 663438015
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "found 0 transfer only queues"
+      }
+    },
+    {
+      "index": 9,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 663439143
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "found 0 compute only queues"
+      }
+    },
+    {
+      "index": 10,
+      "message": {
+        "time": {
+          "secs": 1674323269,
+          "nanos": 668425529
+        },
+        "level": {
+          "Panic": {
+            "line": 621,
+            "file": "/home/jeremy/Documents/projects/infinity/hadron/src/graphics/vulkan_experimental.rs",
+            "message": "not yet implemented"
+          }
+        },
+        "topic": "panic",
+        "message": "not yet implemented"
+      }
+    }
+  ]
+}

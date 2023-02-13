@@ -1,0 +1,147 @@
+{
+  "id": {
+    "_unique": 120104459129662171202581390933320794112
+  },
+  "timestamp": "2023-01-21T18:05:06.055034570Z",
+  "messages": [
+    {
+      "index": 0,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 53673161
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "setting vulkan instance app name: Test App Name"
+      }
+    },
+    {
+      "index": 1,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 53703347
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "setting vulkan instance engine name: Test Engine Name"
+      }
+    },
+    {
+      "index": 2,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 53728184
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "enabling vulkan instance extensions: [ExtDebugUtils, KhrSurface, KhrWaylandSurface]"
+      }
+    },
+    {
+      "index": 3,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 53781786
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "enabling vulkan instance validation layers: [KhronosValidation]"
+      }
+    },
+    {
+      "index": 4,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 53811087
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "building vulkan instance"
+      }
+    },
+    {
+      "index": 5,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 53873829
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "enabled instance extensions: [0x564150f6ed59, 0x564150f6ed8c, 0x564150f6ed79]"
+      }
+    },
+    {
+      "index": 6,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 168652242
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "building vulkan logical device"
+      }
+    },
+    {
+      "index": 7,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 169425019
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "found 1 gtc surface support queues"
+      }
+    },
+    {
+      "index": 8,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 169453744
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "found 0 transfer only queues"
+      }
+    },
+    {
+      "index": 9,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 169456134
+        },
+        "level": "Information",
+        "topic": "general",
+        "message": "found 0 compute only queues"
+      }
+    },
+    {
+      "index": 10,
+      "message": {
+        "time": {
+          "secs": 1674324306,
+          "nanos": 386364586
+        },
+        "level": {
+          "Panic": {
+            "line": 621,
+            "file": "/home/jeremy/Documents/projects/infinity/hadron/src/graphics/vulkan_experimental.rs",
+            "message": "not yet implemented",
+            "backtrace": "   0: hadron::debug::log::structured::StructuredPanicInfo::from_panic_info\n             at /home/jeremy/Documents/projects/infinity/hadron/src/debug/log.rs:233:28\n   1: hadron::debug::log::signal_panic\n             at /home/jeremy/Documents/projects/infinity/hadron/src/debug/log.rs:158:27\n   2: hadron::debug::log::set_panic_hook::{{closure}}\n             at /home/jeremy/Documents/projects/infinity/hadron/src/debug/log.rs:150:9\n   3: <alloc::boxed::Box<F,A> as core::ops::function::Fn<Args>>::call\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/alloc/src/boxed.rs:2032:9\n   4: std::panicking::rust_panic_with_hook\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:692:13\n   5: std::panicking::begin_panic_handler::{{closure}}\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:577:13\n   6: std::sys_common::backtrace::__rust_end_short_backtrace\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/sys_common/backtrace.rs:137:18\n   7: rust_begin_unwind\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:575:5\n   8: core::panicking::panic_fmt\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/core/src/panicking.rs:65:14\n   9: core::panicking::panic\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/core/src/panicking.rs:115:5\n  10: hadron::graphics::vulkan_experimental::builders::VulkanLogicalDeviceBuilder::build\n             at /home/jeremy/Documents/projects/infinity/hadron/src/graphics/vulkan_experimental.rs:621:25\n  11: hadron::graphics::vulkan_experimental::VulkanGraphics::new\n             at /home/jeremy/Documents/projects/infinity/hadron/src/graphics/vulkan_experimental.rs:188:23\n  12: hadron::app::App::event_start_init\n             at /home/jeremy/Documents/projects/infinity/hadron/src/app.rs:231:15\n  13: hadron::app::App::dispatch_window_event\n             at /home/jeremy/Documents/projects/infinity/hadron/src/app.rs:160:47\n  14: hadron::app::App::main_loop::{{closure}}\n             at /home/jeremy/Documents/projects/infinity/hadron/src/app.rs:307:59\n  15: winit::platform_impl::platform::wayland::event_loop::EventLoop<T>::run_return\n             at /home/jeremy/.cargo/registry/src/github.com-1ecc6299db9ec823/winit-0.27.5/src/platform_impl/linux/wayland/event_loop/mod.rs:233:9\n  16: winit::platform_impl::platform::wayland::event_loop::EventLoop<T>::run\n             at /home/jeremy/.cargo/registry/src/github.com-1ecc6299db9ec823/winit-0.27.5/src/platform_impl/linux/wayland/event_loop/mod.rs:222:25\n  17: winit::platform_impl::platform::EventLoop<T>::run\n             at /home/jeremy/.cargo/registry/src/github.com-1ecc6299db9ec823/winit-0.27.5/src/platform_impl/linux/mod.rs:755:56\n  18: winit::event_loop::EventLoop<T>::run\n             at /home/jeremy/.cargo/registry/src/github.com-1ecc6299db9ec823/winit-0.27.5/src/event_loop.rs:278:9\n  19: hadron::app::App::main_loop\n             at /home/jeremy/Documents/projects/infinity/hadron/src/app.rs:373:9\n  20: hadron::app::App::run\n             at /home/jeremy/Documents/projects/infinity/hadron/src/app.rs:288:9\n  21: game::main\n             at ./src/main.rs:30:5\n  22: core::ops::function::FnOnce::call_once\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/core/src/ops/function.rs:510:5\n  23: std::sys_common::backtrace::__rust_begin_short_backtrace\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/sys_common/backtrace.rs:121:18\n  24: std::rt::lang_start::{{closure}}\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/rt.rs:166:18\n  25: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/core/src/ops/function.rs:609:13\n  26: std::panicking::try::do_call\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:483:40\n  27: std::panicking::try\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:447:19\n  28: std::panic::catch_unwind\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panic.rs:137:14\n  29: std::rt::lang_start_internal::{{closure}}\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/rt.rs:148:48\n  30: std::panicking::try::do_call\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:483:40\n  31: std::panicking::try\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panicking.rs:447:19\n  32: std::panic::catch_unwind\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/panic.rs:137:14\n  33: std::rt::lang_start_internal\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/rt.rs:148:20\n  34: std::rt::lang_start\n             at /rustc/c1a859b25a95999ba276075bbd8e284ea675b41a/library/std/src/rt.rs:165:17\n  35: main\n  36: __libc_start_call_main\n             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n  37: __libc_start_main_impl\n             at ./csu/../csu/libc-start.c:392:3\n  38: _start\n"
+          }
+        },
+        "topic": "panic",
+        "message": "not yet implemented"
+      }
+    }
+  ]
+}
