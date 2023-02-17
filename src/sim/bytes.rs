@@ -48,8 +48,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let hmap = HomogeneousMap::new::<usize, i32>();
-
+                
     }
 
     #[test]

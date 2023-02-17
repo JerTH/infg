@@ -1,3 +1,5 @@
+use std::collections::{BinaryHeap, VecDeque, btree_set};
+use std::collections::btree_map::{VacantEntry, OccupiedEntry};
 /// A relational entity database which supports fast cacheable queries and quick parallel iteration
 
 use std::sync::{LazyLock, Mutex, Arc, MutexGuard};
@@ -6,6 +8,8 @@ use std::collections::{HashMap, BTreeSet, hash_map::Entry};
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::hash::Hash;
+
+use alloc::collections;
 //use crate::sim::bytes::HomogeneousMap;
 
 // Macros to make certain operations interfacing with the `EntityDatabase` more ergonomic
@@ -104,6 +108,12 @@ pub union IdUnion {
 /// An `EntityId` uniquely identifies a single entity
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)] pub struct EntityId(IdUnion);
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+enum ComponentDelta {
+    Add(ComponentType),
+    Remove(ComponentType),
+}
+
 /// A `ComponentId` uniquely identifies a single component within a column of components
 /// 
 /// These are functionally the same as `EntityId`'s
@@ -114,20 +124,30 @@ pub union IdUnion {
 /// These are functionally the same as `EntityId`'s
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)] struct FamilyId(IdUnion);
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+enum FamilyDelta {
+    Add(FamilyId),
+    Remove(FamilyId),
+}
+
 /// A `FamilyGraphEdge` describes how to transfer an entity between families given a new or removed component
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-struct FamilyGraphEdge { component: ComponentType, add: Option<FamilyId>, remove: Option<FamilyId> }
-
-type TableColumnEntry = HashMap<ComponentType, ComponentColumnEntry>;
+struct FamilyGraphEdge {
+    component: ComponentType,
+    delta: FamilyDelta,
+}
 
 /// Stores raw component data of a single type, describes how to interact with that data
 struct ComponentColumnEntry {
     data: Box<dyn Any>, // ComponentColumn<T>
     mvfn: fn(&EntityId, &mut Box<dyn Any>, &mut Box<dyn Any>),
+    ctor: fn() -> Box<dyn Any>,
 }
 
+type TableEntry = HashMap<ComponentType, ComponentColumnEntry>;
+
 #[derive(Debug)]
-struct DataTableGuard<'a>(MutexGuard<'a, TableColumnEntry>);
+struct DataTableGuard<'a>(MutexGuard<'a, TableEntry>);
 
 /// A `DataTable` represents a single table of components unique to a family. This is where actual user
 /// application data is stored as rows and columns of components, and so its contents are dynamically typed
@@ -141,7 +161,7 @@ struct DataTableGuard<'a>(MutexGuard<'a, TableColumnEntry>);
 /// E77 [&'2]  [ 2 ] 
 /// E31 [&'1]  [ 0 ]
 ///  
-#[derive(Default, Debug)] struct DataTable(Arc<Mutex<TableColumnEntry>>);
+#[derive(Default, Debug)] struct DataTable(Arc<Mutex<TableEntry>>);
 
 //trait MoveableAny: Any + Debug {
 //    fn as_mut_any<'a>(&'a mut self) -> &'a mut dyn Any;
@@ -149,12 +169,13 @@ struct DataTableGuard<'a>(MutexGuard<'a, TableColumnEntry>);
 //    fn move_to(&mut self, to: &mut Box<dyn Any>, index: EntityId);
 //}
 
-pub trait Component: Debug {}
+pub trait Component: Any + Debug + 'static {}
 
 /// A `ComponentColumn<T>` is the raw typed storage for a single component type in a `DataTable`
 /// 
 /// Columns are indexed by `ComponentType`'s, and rows are indexed by `EntityId`'s
-struct ComponentColumn<T: Any + Debug + 'static>(HashMap<EntityId, T>);
+#[derive(Default)]
+struct ComponentColumn<T: Component>(HashMap<EntityId, T>);
 
 /// A `Family` is a collection of entities with the same components, when components are
 /// added or removed from an entity, the entity is moved between families
@@ -211,99 +232,205 @@ impl EntityDatabase {
 
         id
     }
+    
+    fn new_family(&mut self, new_component_type: ComponentType, old_family_id: &FamilyId) -> FamilyId {
+        let family_components = &self.data.families.get(&old_family_id).expect("expected existing family").components;
+        let target_set = family_components.iter().cloned().chain([new_component_type]).collect();
+        let target_id = self.get_or_register_family_id_for(target_set);
+        let transfer_graph = &mut self.data.families.get_mut(&old_family_id).expect("expected existing family").transfer_graph;
+        
+        let transfer_edge = transfer_graph
+            .entry(new_component_type)
+            .or_insert_with(|| {
+                FamilyGraphEdge {
+                    component: new_component_type,
+                    delta: FamilyDelta::Add(target_id)
+                }
+            }
+        );
+        
+        let new_family_id = match transfer_edge.delta {
+            FamilyDelta::Add(add) => add,
+            FamilyDelta::Remove(_) => panic!("family delta is remove"),
+        };
 
-    pub fn add_component<T: Component + 'static>(&mut self, entity: EntityId, component: T) {
-        let component_type = component!(T);
+        new_family_id
+    }
 
-        // check if this entity has a family already (e.g., does it have any components?)
-        let (new_family_id, old_family_id) = if let Some(family_id) = self.records.entities.get(&entity).cloned() {
-            // it does have a family, meaning it has existing components
-            let family_components = &self.data.families.get(&family_id).expect("expected existing family").components;
-            
-            // check if the component we are trying to add is already part of the entity, if so, we can just replace the component it
-            let (new_family_id, old_family_id) = if family_components.contains(&component_type) {
-                (family_id, family_id)
-            } else {
-                // the component is not already part of the entity, we need to find its new family
-                // we will also need to remove it from its old family
-                let target_set = family_components.iter().cloned().chain([component_type]).collect();
-                let target_id = self.get_or_register_family_id(target_set);
-                let transfer_graph = &mut self.data.families.get_mut(&family_id).expect("expected existing family").transfer_graph;
-                
-                let transfer_edge = transfer_graph
-                    .entry(component_type)
-                    .or_insert_with(|| {
-                        FamilyGraphEdge { component: component_type, add: Some(target_id), remove: None }
-                    }
-                );
-                
-                let new_family_id = transfer_edge.add.expect("expected transfer graph edge");
-                
-                // we have the new target family, remove it from the old family
-                let _removed = self.records.entities.remove(&entity);
-                self.records.entities.insert(entity, new_family_id);
+    /// Computes the new `FamilyId` for the entity after a component delta
+    /// 
+    /// Returns `None` if the `FamilyId` is unchanged
+    fn resolve_new_family_id(&mut self, entity: &EntityId, delta: ComponentDelta) -> Option<FamilyId> {
+        // if the entity exists, get its family id, if it doesn't we return and do nothing
+        let current_family_id = *self.records.entities.get(entity)?;
 
-                (new_family_id, family_id)
-            };
-            
-            (new_family_id, old_family_id)
-        } else {
-            let set = component_type_set!(T);
-
-            // it doesn't exist yet, this means the entity has no components, lets get or
-            // create the family which corresponds to a single component of type `T` and add the entity to it
-            let family_id = self.get_or_register_family_id(set.clone());
-            self.records.entities.insert(entity, family_id);
-
-            // create the actual family data if necessary, including an empty transfer graph
-            // do nothing if it already exists - we do not want to destroy an existing transfer graph
-            self.data.families
-                .entry(family_id)
-                .or_insert(Family { components: set, transfer_graph: Default::default() });
-
-            (family_id, family_id)
+        // get the set of components for the current family, if it has any
+        let current_components = match self.data.families.get(&current_family_id) {
+            Some(family) => {
+                family.components.clone()
+            },
+            None => {
+                component_type_set!(())
+            },
         };
         
-        {
-            // get or create the data table associated with the entity family
-            let mut table = self.data.tables
-                .entry(new_family_id)
-                .or_insert(Default::default())
-                .lock();
+        // are we adding or removing the component
+        match delta {
+            ComponentDelta::Add(added) => {
+                if current_components.contains(&added) {
+                    None
+                } else {
+                    
+                    // do we have a family?
+                    match self.data.families.entry(current_family_id) {
 
-            // get the component column for the component type from the data table or create it
-            let column = table
-                .entry(component_type)
-                .or_insert(ComponentColumnEntry {
-                    data: Box::new(ComponentColumn::<T>::new()),
-                    mvfn: |row, a, b| {
-                        dbg!((*a).type_id(), (*b).type_id());
-                        dbg!((*a).is::<ComponentColumn<T>>(), (*b).is::<ComponentColumn<T>>());
-                        dbg!(TypeId::of::<ComponentColumn<T>>());
-                        dbg!(TypeId::of::<Box<dyn Any>>());
+                        Entry::Occupied(occupied) => {
+                            let current_family = occupied.get_mut();
 
-                        let from = a.downcast_mut::<ComponentColumn<T>>().expect("expect from");
-                        let dest = b.downcast_mut::<ComponentColumn<T>>().expect("expect dest");
-                        match from.remove(row) {
-                            Some(item) => { dest.insert(*row, item); },
-                            None => { #[cfg(Debug)] println!("no row value to move"); },
-                        }
+                            // we have a family, the family has a transfer graph
+                            // does the transfer graph know about the transfer we're trying to do? 
+                            match current_family.transfer_graph.entry(added) {
+                                Entry::Occupied(transfer_edge) => {
+                                    // we have a transfer edge, if the delta types match, use it
+                                    match transfer_edge.get().delta {
+                                        FamilyDelta::Add(add) => return Some(add),
+                                        FamilyDelta::Remove(_) => panic!("mismatched transfer deltas (remove when adding)"),
+                                    }
+                                },
+                                Entry::Vacant(vacant) => {
+                                    // we don't have an existing transfer edge, find the target family
+                                    let new_components: ComponentTypeSet = current_components.iter().cloned().chain([added]).collect();
+                                    let new_family_id = self.get_or_register_family_id_for(new_components);
+
+                                    // create the transfer edge to speed up later transfers
+                                    vacant.insert(FamilyGraphEdge {
+                                        component: added,
+                                        delta: FamilyDelta::Add(new_family_id),
+                                    });
+
+                                    return Some(new_family_id);
+                                },
+                            }
+                        },
+
+                        // we don't have an existing family, this is a brand new entity
+                        // create the new single component family
+                        Entry::Vacant(vacant) => {
+                            let new_component_set = ComponentTypeSet::from(added);
+                            let new_family_id = self.register_family(new_component_set);
+
+                            return Some(new_family_id)
+                        },
+                    }
+                }
+            },
+            ComponentDelta::Remove(removed) => {
+                todo!("resolve_new_family_id with ComponentDelta::Remove not yet supported")
+            },
+        }
+    }
+
+    /// Moves a row from one `DataTable` to another
+    /// 
+    /// A single row in a data table is, effectively, a single entity 
+    fn move_row_data(&mut self, row: &EntityId, from: &DataTable, to: &DataTable) {
+        let from = from.lock();
+        let to = to.lock();
+        
+        from.move_row(row, &mut to);
+    }
+
+    /// Inserts or replaces component data for a given entity in the appropriate `DataTable`, associated
+    /// by the entities `Family`. Lazily constructs data tables component columns
+    fn insert_real_component<T: Component>(&mut self, entity: &EntityId, family: &FamilyId, component: T) -> Result<(), ()> {
+        let table = self.data.tables.get_mut(&family).ok_or(())?;
+        let guard = table.lock();
+
+        match guard.entry(component!(T)) {
+            Entry::Occupied(occupied) => {
+                let column_entry = occupied.get_mut();
+                match column_entry.data.downcast_mut::<ComponentColumn<T>>() {
+                    Some(column) => {
+                        column.insert(*entity, component);
                     },
-                });
+                    None => {
+                        panic!("mismatched column type");
+                    },
+                }
+            },
+            Entry::Vacant(vacant) => {
+                let column = ComponentColumn::<T>::from((*entity, component));
+                let column_entry = ComponentColumnEntry {
+                    data: Box::new(column),
+                    mvfn: ComponentColumn::<T>::fn_virtual_move,
+                    ctor: ComponentColumn::<T>::fn_virtual_ctor,
+                };
 
-            // insert the new component for the entity in the table column
-            column.insert(entity, component);
+                vacant.insert(column_entry);
+            },
+        }
+        Ok(())
+    }
+
+    /// Adds a component `T` to an entity by its `EntityId`
+    /// 
+    pub fn add_component<T: Component>(&mut self, entity: EntityId, component: T) -> Result<(), ()> {
+        let component_type = component!(T);
+        let old_family_id = self.records.entities.get(&entity).cloned();
+        let new_family_id = self.resolve_new_family_id(&entity, ComponentDelta::Add(component_type));
+
+        match new_family_id {
+            // the entity has a new family, we need to move its data and then add the new component
+            // we may even need to build the associated data tables if this is the first entity of this family
+            Some(new_family_id) => {
+                debug_assert!(self.data.families.contains_key(&new_family_id));
+                
+                // get the set of components associated with the new family
+                // if the family was just created, this is used to initialize its data table
+                let set = match self.data.families.get(&new_family_id) {
+                    Some(family) => {
+                        family.components
+                    },
+                    None => {
+                        // family doesn't exist with this family_id
+                        panic!("family doesn't exist");
+                    },
+                };
+                
+                match old_family_id {
+                    Some(old_family_id) => {
+                        // we need to move the entities old components from its old associated table
+                        // to its new associated table
+                        let from_table = self.data.tables.get(&old_family_id).ok_or(())?;
+                        let to_table = self.data.tables.get(&new_family_id).ok_or(())?;
+                        
+                        self.move_row_data(&entity, from_table, to_table)
+                    },
+                    None => {
+                        // the entity is brand new, it doesn't have any old components to be moved
+                    },
+                }
+
+                // at this point any data associated with the entity should already be moved to its new table
+                // its id should be associated with its new family, and all we have to do is actually
+                // add the new component
+                self.insert_real_component::<T>(&entity, &new_family_id, component);
+            },
+
+            // the entity isn't changing families, we simply need to replace the given component
+            None => {
+                match old_family_id {
+                    Some(old_family_id) => {
+                        self.insert_real_component::<T>(&entity, &old_family_id, component);
+                    },
+                    None => {
+                        panic!("the entity has no appropriate family");
+                    },
+                }
+            },
         }
         
-        {
-            // the entity has moved, we need to copy all of its other components from its old data table to its new one
-            if new_family_id != old_family_id {
-                let mut to = self.data.tables.get(&new_family_id).expect("expected new data table").lock();
-                let mut from = self.data.tables.get(&old_family_id).expect("expected old data table").lock();
-                
-                from.move_row(&mut to, &entity);
-            }
-        }
+        Ok(())
     }
     
     pub fn register_component<T: 'static>(&mut self) {
@@ -335,12 +462,7 @@ impl EntityDatabase {
         id
     }
 
-    fn add_unit_component(&mut self, id: EntityId) {
-        let family = self.get_or_register_family_id(component_type_set!( () ));
-        self.records.entities.insert(id, family);
-    }
-
-    fn get_or_register_family_id(&mut self, set: ComponentTypeSet) -> FamilyId {
+    fn get_or_register_family_id_for(&mut self, set: ComponentTypeSet) -> FamilyId {
         let id = if let Some(id) = self.records.family_id_for(set.clone()) {
             id
         } else {
@@ -488,13 +610,22 @@ impl From<EntityId> for FamilyId {
 
 // `ComponentColumnEntry`
 impl ComponentColumnEntry {
-    fn insert<T: Debug + Any + 'static>(&mut self, key: EntityId, val: T) -> Option<T> {
+    fn insert<T: Component>(&mut self, key: EntityId, val: T) -> Option<T> {
         let column = self.data.downcast_mut::<ComponentColumn<T>>().unwrap();
         column.insert(key, val)
     }
 
     fn move_row_val(&mut self, row: &EntityId, dest: &mut Self) {
         (self.mvfn)(row, &mut self.data, &mut dest.data)
+    }
+
+    fn shallow_clone(&self) -> Self {
+        let data = (self.ctor)();
+        ComponentColumnEntry {
+            data: data,
+            mvfn: self.mvfn,
+            ctor: self.ctor
+        }
     }
 }
 
@@ -509,17 +640,31 @@ impl Debug for ComponentColumnEntry {
 
 // `DataTableGuard`
 impl<'a> DataTableGuard<'a> {
-    fn move_row(&mut self, to: &mut DataTableGuard, row: &EntityId) {
-        for (from, dest) 
-        in self.0.iter_mut().zip(to.0.iter_mut()) {
-            dbg!(&from, &dest);
-            from.1.move_row_val(row, dest.1);
+    fn move_row(&mut self, row: &EntityId, to: &mut DataTableGuard) {
+        for (component, from) in self.iter_mut() {
+            match to.entry(*component) {
+                Entry::Occupied(occupied) => {
+                    let to = occupied.get_mut();
+                    from.move_row_val(row, to);
+                },
+                Entry::Vacant(vacant) => {
+                    let new_column = vacant.insert(ComponentColumnEntry {
+                        data: (from.ctor)(),
+                        mvfn: from.mvfn,
+                        ctor: from.ctor,
+                    });
+                    from.move_row_val(row, new_column);
+                },
+            }
+            if let Some(to) = to.get_mut(component) {
+                from.move_row_val(row, to);
+            }
         }
     }
 }
 
 impl<'a> Deref for DataTableGuard<'a> {
-    type Target = TableColumnEntry;
+    type Target = TableEntry;
 
     fn deref(&self) -> &Self::Target {
         self.0.deref()
@@ -537,13 +682,13 @@ impl DataTable {
     fn lock(&self) -> DataTableGuard {
         match self.0.lock() {
             Ok(guard) => DataTableGuard(guard),
-            Err(err) => panic!("unable to lock data table for reading: {}", err),
+            Err(err) => panic!("poisoned, unable to lock data table for reading: {}", err),
         }
     }
 }
 
 impl Deref for DataTable {
-    type Target = Arc<Mutex<TableColumnEntry>>;
+    type Target = Arc<Mutex<TableEntry>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -560,56 +705,40 @@ impl DerefMut for DataTable {
 impl Component for () {}
 
 // `ComponentColumn`
-impl<T: Debug + 'static> ComponentColumn<T> {
+impl<T: Component> ComponentColumn<T> {
     fn new() -> Self {
         ComponentColumn(Default::default())
     }
+
+    fn fn_virtual_move(row: &EntityId, from: &mut Box<dyn Any>, to: &mut Box<dyn Any>) {
+        let from = from.downcast_mut::<ComponentColumn<T>>().expect("expect from");
+        let dest = to.downcast_mut::<ComponentColumn<T>>().expect("expect dest");
+        match from.remove(row) {
+            Some(item) => { dest.insert(*row, item); },
+            None => { #[cfg(Debug)] println!("no row value to move"); },
+        }
+    }
+
+    fn fn_virtual_ctor() -> Box<dyn Any> {
+        Box::new(ComponentColumn::<T>::new())
+    }
 }
 
-//impl<T: Debug + 'static> MoveableAny for ComponentColumn<T> {
-//    fn as_any<'a>(&'a self) -> &'a dyn Any {
-//        self
-//    }
-//
-//    fn as_mut_any(&mut self) -> &mut dyn Any {
-//        self
-//    }
-//
-//    fn move_to(&mut self, to: &mut Box<dyn Any>, index: EntityId) {
-//        let column_from = self
-//            .as_mut_any()
-//            .downcast_mut::<ComponentColumn<T>>()
-//            .expect("expected matching component columns");
-//        
-//        // unsafe transmute
-//        // need a lot more guard rails around this
-//        let column_to = unsafe {
-//            dbg!(std::mem::transmute::<&mut Box<dyn Any>, &mut Box<ComponentColumn<T>>>(to))
-//        };
-//
-//        #[cfg(Debug)] println!("moving component {:?} from column {:?} to column {:?}", index, from, to);
-//
-//        let item = match column_from.entry(index) {
-//            Entry::Occupied(occupied) => occupied.remove_entry(),
-//            Entry::Vacant(_) => panic!("expected valid entry, where did it go?"),
-//        };
-//        
-//        match column_to.entry(index) {
-//            Entry::Occupied(_) => panic!("component slot was already occupied"),
-//            Entry::Vacant(vacant) => {
-//                vacant.insert(item.1);
-//            },
-//        }
-//    }
-//}
+impl<T: Component> From<(EntityId, T)> for ComponentColumn<T> {
+    fn from(value: (EntityId, T)) -> Self {
+        let mut column = ComponentColumn::new();
+        column.insert(value.0, value.1);
+        column
+    }
+}
 
-impl<T: Debug + Any + 'static> Debug for ComponentColumn<T> {
+impl<T: Component> Debug for ComponentColumn<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ComponentColumn").field("data", &self).finish()
     }
 }
 
-impl<T: Debug + Any + 'static> Deref for ComponentColumn<T> {
+impl<T: Component> Deref for ComponentColumn<T> {
     type Target = HashMap<EntityId, T>;
 
     fn deref(&self) -> &Self::Target {
@@ -617,7 +746,7 @@ impl<T: Debug + Any + 'static> Deref for ComponentColumn<T> {
     }
 }
 
-impl<T: Debug + Any + 'static> DerefMut for ComponentColumn<T> {
+impl<T: Component> DerefMut for ComponentColumn<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -660,6 +789,12 @@ impl Debug for IdUnion {
 impl FromIterator<ComponentType> for ComponentTypeSet {
     fn from_iter<T: IntoIterator<Item = ComponentType>>(iter: T) -> Self {
         ComponentTypeSet(BTreeSet::from_iter(iter))
+    }
+}
+
+impl From<ComponentType> for ComponentTypeSet {
+    fn from(value: ComponentType) -> Self {
+        ComponentTypeSet([value].iter().cloned().collect())
     }
 }
 
@@ -790,10 +925,16 @@ mod test {
         database.register_component::<Name>();
         database.register_component::<Health>();
 
-        let entity = database.create();
-        database.add_component(entity, Health(100));
-        database.add_component(entity, Name("thing one"));
+        let one = database.create();
+        database.add_component(one, Health(100));
+        database.add_component(one, Name("thing one"));
 
-        dbg!(&database);
+        let two = database.create();
+        database.add_component(two, Health(200));
+        database.add_component(two, Name("thing two"));
+        
+
+        //////dbg!(&database);
+        ////dbg!(&database.data);
     }
 }
